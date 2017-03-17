@@ -16,8 +16,20 @@
           margin-top:10px;
           margin-bottom:10px;
       }
+      .row.no-pad {
+        margin-right:0;
+        margin-left:0;
+      }
+      .row.no-pad [class*='col-'] {
+        padding-right:0;
+        padding-left:0;
+      }
+      .glyphicon {
+            font-size: 25px;
+        }
     </style>
-
+    <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
+    <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
     <!-- Latest compiled and minified CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
 
@@ -30,30 +42,29 @@
   </head>
   <body class="">
       <div class="container">
-        <div class="col-md-12">
-          <div id="player"></div>
-        </div>
-        <div class="col-md-12">
-          <div class="col-md-8">
-            <input id="search" class="form-control"/>
+          <div class="row no-pad">
+            <div class="col-md-12">
+            <div id="player"></div>
+            </div>
+            <div class="col-md-12">
+            <div class="col-md-8">
+                <input id="search" class="form-control"/>
+            </div>
+            <button id="searchButton" class="btn btn-primary col-md-4">Search</button>
+            </div>
+            <div class="col-md-6 title">
+                Search results:
+            </div>
+            <div class="col-md-6 title">
+                Queue
+            </div>
+            <ul id="resultsBox" class="list-group col-md-6">
+            </ul>
+            <ul id="queueBox" class="list-group col-md-6">
+            </ul>
           </div>
-          <button id="searchButton" class="btn btn-primary col-md-4">Search</button>
-        </div>
-        <div class="col-md-6 title">
-            Search results:
-        </div>
-        <div class="col-md-6 title">
-            Queue
-        </div>
-        <ul id="resultsBox" class="list-group col-md-6">
-        </ul>
-        <ul id="queueBox" class="list-group col-md-6">
-        </ul>
     </div>
 
-
-    <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
-    <script src="http://code.jquery.com/jquery-1.11.1.js"></script>
     <script>
       var socket = io();
       $('form').submit(function(){
@@ -64,10 +75,9 @@
       socket.on('chat message', function(msg){
         $('#messages').append($('<li>').text(msg));
       });
-    // </script>
-    // <script>
         var videoID;
         var queue=[];
+        var queueLikes = {};
         var tag = document.createElement('script');
 
         tag.src = "https://www.youtube.com/iframe_api";
@@ -118,6 +128,49 @@
         $("#searchButton").on("click", function(){
             searchQuery();
         })
+
+        function updateQueue(id){
+            var index = queue.indexOf(id);
+            if(index==-1)
+                return 0;
+            console.log(id);
+            console.log(index);
+            while(index > 1 && queueLikes[queue[index]] > queueLikes[queue[index-1]])
+            {
+                console.log(queueLikes[queue[index]], queueLikes[queue[index-1]]);
+                var temp = queue[index];
+                queue[index] = queue[index-1];
+                queue[index-1] = temp;
+                
+                index--;
+            }
+            console.log(id);
+            console.log(index);
+            var movedQueueElement = $("div[data-id=" + id + "]").parent();
+            var staticQueueElement = $("div[data-id=" + queue[index-1] + "]").parent();
+            console.log(movedQueueElement);
+            console.log(staticQueueElement);
+
+            movedQueueElement.insertAfter(staticQueueElement);
+            
+        }
+
+        $("#queueBox").on("click", ".thumbs-up",function(){
+            
+            id = $(this).parent().parent().attr("data-id");
+            queueLikes[id]++;
+            console.log(queueLikes[id]);
+            updateQueue(id);
+        })
+
+        $("#queueBox").on("click", ".thumbs-down",function(){
+            
+            id = $(this).parent().parent().attr("data-id");
+            queueLikes[id]--;
+            console.log(queueLikes[id]);
+            updateQueue(id);            
+        })
+
         socket.on("songChanged", function(id){
             if(player.getPlayerState() == -1)
                player.loadVideoById(id);
@@ -125,14 +178,20 @@
             {
                 // $.inArray(id, queue);
                 queue.push(id);
-
+                queueLikes[id]=1;
                 var videoIdAPI = "https://www.googleapis.com/youtube/v3/videos?id="+id+"&part=snippet&key=AIzaSyA9ej5NSrEqzex76U_xE3PPJlb2rELrW9M";
                 // console.log(videoData.items);
                 $.getJSON(videoIdAPI, function(data){
                     var image = '<div class="col-md-3"> <img class="img-responsive" src="' + data.items[0].snippet.thumbnails.default.url + '"> </div>';
                     // var image = "";
                     // $("#queueBox").append('<li class="list-group-item">'+ image + '</li>');
-                    $("#queueBox").append('<li class="list-group-item clearfix">'+ image + '<div class="col-md-9" data-id="' +data.items[0].id+ '">' + data.items[0].snippet.title +'</div></li>');
+                    $("#queueBox").append('<li class="list-group-item clearfix">' 
+                                            + image 
+                                            + '<div class="col-md-9" data-id="' +data.items[0].id+ '">' 
+                                                + '<div class="col-md-10">' + data.items[0].snippet.title + '</div>' 
+                                                + '<div class="col-md-1"> <span class=" glyphicon glyphicon-thumbs-up thumbs-up "></span> </div>' 
+                                                + '<div class="col-md-1"> <span class=" glyphicon glyphicon-thumbs-down thumbs-down"></span> </div>' 
+                                                + '</div></li>');
                     console.log(data.items[0]);
                 })
                 
@@ -154,7 +213,7 @@
         });
 
         $(document).ready(function(){
-            $("ul").on("click","li", function(){
+            $("ul").on("click","li.result", function(){
                 // console.log($(this));
                 // console.log($(this).children('a').attr("data-id"));
                 // console.log(socket);
@@ -193,7 +252,6 @@
                         }
                     }
                     $('div.search-box a').on('click', function(){
-
                         $('div#player-box').empty();
                         $('div#player-box').append('<div id="player"></div>');
                         sessionStorage.setItem('key', $(this).data("id"));
