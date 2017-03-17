@@ -11,6 +11,11 @@
       #messages { list-style-type: none; margin: 0; padding: 0; }
       #messages li { padding: 5px 10px; }
       #messages li:nth-child(odd) { background: #eee; }
+      div.title {
+          text-align: center;
+          margin-top:10px;
+          margin-bottom:10px;
+      }
     </style>
 
     <!-- Latest compiled and minified CSS -->
@@ -23,12 +28,26 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 
   </head>
-  <body class="container">
-      <div class="row">
-        <div id="player"></div>
-        <input id="search" class="form-control col-md-4"/>
-        <button id="searchButton" class="btn btn-primary ">Search</button>
-        <ul id="searchBox" class="list-group">
+  <body class="">
+      <div class="container">
+        <div class="col-md-12">
+          <div id="player"></div>
+        </div>
+        <div class="col-md-12">
+          <div class="col-md-8">
+            <input id="search" class="form-control"/>
+          </div>
+          <button id="searchButton" class="btn btn-primary col-md-4">Search</button>
+        </div>
+        <div class="col-md-6 title">
+            Search results:
+        </div>
+        <div class="col-md-6 title">
+            Queue
+        </div>
+        <ul id="resultsBox" class="list-group col-md-6">
+        </ul>
+        <ul id="queueBox" class="list-group col-md-6">
         </ul>
     </div>
 
@@ -48,7 +67,7 @@
     // </script>
     // <script>
         var videoID;
-
+        var queue=[];
         var tag = document.createElement('script');
 
         tag.src = "https://www.youtube.com/iframe_api";
@@ -71,31 +90,84 @@
         //The API will call this function when the video player is ready.
         function onPlayerReady(event) {
             event.target.playVideo();
-                console.log(videoID);
+            console.log(videoID);
+            player.addEventListener('onStateChange', function(e) {
+                 console.log('State is:', e.data);
+                 if(e.data==0)
+                 {
+                    var id = queue.shift();
+                    // console.log(id);
+                    if(id)
+                    {
+                        player.loadVideoById(id);
+                        $("div[data-id=" + id + "]").hide();
+                    }
+                    else
+                    {
+                        id=player.getVideoData()['video_id'];
+                        var theAPIrecommendations = "https://www.googleapis.com/youtube/v3/search?part=snippet&relatedToVideoId="+id+"&type=video&maxResults=15&key=AIzaSyA9ej5NSrEqzex76U_xE3PPJlb2rELrW9M";
+
+                        $.getJSON(theAPIrecommendations, function(data){
+                            player.loadVideoById(data.items[0].id.videoId);
+                        })
+                    }
+                 }
+             });
         }
 
         $("#searchButton").on("click", function(){
             searchQuery();
         })
         socket.on("songChanged", function(id){
-            console.log("HUII");
-            player.loadVideoById(id);
+            if(player.getPlayerState() == -1)
+               player.loadVideoById(id);
+            else if($.inArray(id, queue)==-1)
+            {
+                // $.inArray(id, queue);
+                queue.push(id);
+
+                var videoIdAPI = "https://www.googleapis.com/youtube/v3/videos?id="+id+"&part=snippet&key=AIzaSyA9ej5NSrEqzex76U_xE3PPJlb2rELrW9M";
+                // console.log(videoData.items);
+                $.getJSON(videoIdAPI, function(data){
+                    var image = '<div class="col-md-3"> <img class="img-responsive" src="' + data.items[0].snippet.thumbnails.default.url + '"> </div>';
+                    // var image = "";
+                    // $("#queueBox").append('<li class="list-group-item">'+ image + '</li>');
+                    $("#queueBox").append('<li class="list-group-item clearfix">'+ image + '<div class="col-md-9" data-id="' +data.items[0].id+ '">' + data.items[0].snippet.title +'</div></li>');
+                    console.log(data.items[0]);
+                })
+                
+                // console.log("dsdsa");
+                
+            }
+            // player.cueVideoById(id);
+            // setTimeout(function(){
+            //   console.log(player.getDuration());
+            // },5000);
+            // console.log(https://gdata.youtube.com/feeds/api/videos/Xr8vUTm64h0/related?v=2&fields=entry(id));
+
+            // $.get("https://gdata.youtube.com/feeds/api/videos/Xr8vUTm64h0/related?v=2&fields=entry(" + id + ')', function(data){
+            // $.get("https://gdata.youtube.com/feeds/api/standardfeeds/most_popular", function(data){
+            //   console.log(data);
+            // });
+
+            
         });
-        
+
         $(document).ready(function(){
             $("ul").on("click","li", function(){
-                console.log($(this));
-                console.log($(this).children('a').attr("data-id"));
-                console.log(socket);
+                // console.log($(this));
+                // console.log($(this).children('a').attr("data-id"));
+                // console.log(socket);
+
                 // e.preventDefault();
-                let id = $(this).children('a').attr("data-id");
+                let id = $(this).find('a').attr("data-id");
                 // player.loadVideoById(id);
                 socket.emit("songChange",id);
             })
         });
         function searchQuery() {
             //Declare selectors
-            var queryContainer = $('#searchBox');
+            var queryContainer = $('#resultsBox');
             var searchBox = $('#search');
 
             //Declare variables from input elements :)
@@ -114,10 +186,10 @@
                     for(var i=0; i<=20; ++i){
                         //Using the kind property from YoutubeAPI determine is it a profile or video
                         // console.log(data.items);
+                        var image = '<div class="col-md-3"> <img class="img-responsive" src="' + data.items[i].snippet.thumbnails.default.url + '"></div>';
                         if(data.items[i].id.kind === 'youtube#video'){
-                            $(queryContainer).append('<li class="result list-group-item"><a href="#" data-id="' +data.items[i].id.videoId+'">' +data.items[i].snippet.title+'</a></li>');
-                        }else if(data.items[i].id.kind === 'youtube#channel'){
-                            $(queryContainer).append('<li><a href="https://www.youtube.com/user/'+data.items[i].snippet.title+'">' +data.items[i].snippet.title+'</a></li>')
+                            $(queryContainer).append('<li class="result list-group-item clearfix">'+ image + '<div class="col-md-9"><a href="#" data-id="' +data.items[i].id.videoId+'">' +data.items[i].snippet.title+'</a></div></li>');
+                        
                         }
                     }
                     $('div.search-box a').on('click', function(){
@@ -135,7 +207,6 @@
                 if(checker){
                     $(queryContainer).empty();
                 }
-
             }else{
                 $(queryContainer).empty();
                 return false;
